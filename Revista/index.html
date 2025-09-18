@@ -24,6 +24,38 @@
 		body {width: 100%;height: 100%;left: 0;top: 0;margin: 0;padding: 0;position: fixed;}
 	</style>
 </head>
+<script>
+(function () {
+  const p = new URLSearchParams(location.search);
+  const shareUrl =
+    p.get("share") ||
+    ((document.referrer && document.referrer.startsWith("http")) ? document.referrer : location.href);
+
+  function shareNow() {
+    const title = document.title || "Revista";
+    if (navigator.share) {
+      navigator.share({ title, url: shareUrl }).catch(()=>{});
+    } else {
+      const u = encodeURIComponent(shareUrl);
+      window.open("https://www.facebook.com/sharer/sharer.php?u=" + u, "_blank","noopener,noreferrer,width=600,height=520");
+    }
+  }
+
+  function hook() {
+    const btn = document.querySelector('.button[aria-label="Redes Sociales"]');
+    if (btn && !btn.__shareHooked) {
+      btn.__shareHooked = true;
+      btn.addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation();
+        shareNow();
+      }, true);
+    }
+  }
+  hook();
+  new MutationObserver(hook).observe(document.documentElement, { childList: true, subtree: true });
+})();
+</script>
+
 
 <body>
   
