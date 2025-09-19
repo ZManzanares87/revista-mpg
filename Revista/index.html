@@ -26,6 +26,7 @@
 </head>
 <script>
 (function () {
+  // 1) URL a compartir: ?share=... (del padre) -> referrer -> fallback (iframe)
   const p = new URLSearchParams(location.search);
   const shareUrl =
     p.get("share") ||
@@ -37,24 +38,74 @@
       navigator.share({ title, url: shareUrl }).catch(()=>{});
     } else {
       const u = encodeURIComponent(shareUrl);
-      window.open("https://www.facebook.com/sharer/sharer.php?u=" + u, "_blank","noopener,noreferrer,width=600,height=520");
+      window.open("https://www.facebook.com/sharer/sharer.php?u=" + u,
+        "_blank","noopener,noreferrer,width=600,height=520");
     }
   }
 
-  function hook() {
-    const btn = document.querySelector('.button[aria-label="Redes Sociales"]');
-    if (btn && !btn.__shareHooked) {
-      btn.__shareHooked = true;
-      btn.addEventListener("click", function (e) {
+  // Engancha el botón “Redes Sociales” y reescribe enlaces de compartir
+  function hookShareButtons() {
+    const set = new Set();
+    document.querySelectorAll('.button[aria-label="Redes Sociales"], [aria-label="Redes Sociales"]').forEach(el=>set.add(el));
+    document.querySelectorAll('img[alt="sharethis"]').forEach(img=>{
+      const btn = img.closest('[role="button"], .button, a, div');
+      if (btn) set.add(btn);
+    });
+    set.forEach(el=>{
+      if (el.__shareHooked) return;
+      el.__shareHooked = true;
+      el.addEventListener("click", function (e) {
         e.preventDefault(); e.stopPropagation();
         shareNow();
       }, true);
-    }
+    });
+
+    const enc = encodeURIComponent(shareUrl);
+    const map = {
+      'a[href*="facebook.com/sharer"]'      : 'https://www.facebook.com/sharer/sharer.php?u=',
+      'a[href*="twitter.com/intent"]'       : 'https://twitter.com/intent/tweet?url=',
+      'a[href*="linkedin.com/shareArticle"]': 'https://www.linkedin.com/shareArticle?mini=true&url=',
+      'a[href*="api.whatsapp.com/send"]'    : 'https://api.whatsapp.com/send?text='
+    };
+    Object.entries(map).forEach(([sel, base])=>{
+      document.querySelectorAll(sel).forEach(a=>{
+        a.href = base + enc; a.target = "_blank"; a.rel = "noopener noreferrer";
+      });
+    });
   }
-  hook();
-  new MutationObserver(hook).observe(document.documentElement, { childList: true, subtree: true });
+
+  // Intercepta window.open para forzar shareUrl (cubre botón derecho/menús internos)
+  const _open = window.open;
+  window.open = function(url, target, features){
+    try{
+      const u = new URL(url, location.href);
+      const host = u.hostname;
+      if (host.includes('facebook.com') && u.pathname.includes('/sharer')) {
+        u.searchParams.set('u', shareUrl);
+      }
+      if (host.includes('twitter.com') && u.pathname.includes('/intent')) {
+        u.searchParams.set('url', shareUrl);
+      }
+      if (host.includes('linkedin.com') && (u.pathname.includes('/share') || u.pathname.includes('/shareArticle'))) {
+        u.searchParams.set('url', shareUrl);
+        u.searchParams.set('mini', 'true');
+      }
+      if (host.includes('api.whatsapp.com')) {
+        const prev = u.searchParams.get('text') || '';
+        u.searchParams.set('text', prev ? (prev + ' ' + shareUrl) : shareUrl);
+      }
+      url = u.toString();
+    }catch(e){}
+    return _open.call(window, url, target, features);
+  };
+
+  // Observa el DOM por si el visor re-renderiza
+  const mo = new MutationObserver(hookShareButtons);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  hookShareButtons();
 })();
 </script>
+
 
 
 <body>
